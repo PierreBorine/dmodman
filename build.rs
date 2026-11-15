@@ -1,9 +1,20 @@
 use bindgen::MacroTypeVariation::Signed;
-use std::env;
+use std::{env, fs};
 use std::path::PathBuf;
+
+#[path = "src/cli.rs"]
+mod cli;
+
+use clap::{CommandFactory, ValueEnum};
+use clap_complete::{Shell, generate_to};
+use cli::Cli;
+
+const PKG_NAME: &str = env!("CARGO_PKG_NAME");
 
 fn main() {
     println!("cargo:rustc-link-lib=archive");
+
+    let out_dir = env::var("OUT_DIR").unwrap();
 
     let bindings = bindgen::Builder::default()
         .header("ffi/libarchive-wrapper.h")
@@ -28,6 +39,14 @@ fn main() {
         .generate()
         .unwrap();
 
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = PathBuf::from(&out_dir);
     bindings.write_to_file(out_path.join("bindings.rs")).expect("Couldn't save bindings.rs file.");
+
+    // Generate shell completion
+    let comp_path = out_path.join("completion");
+    fs::create_dir_all(&comp_path).unwrap();
+    let mut cmd = Cli::command();
+    for &shell in Shell::value_variants() {
+        generate_to(shell, &mut cmd, PKG_NAME, &comp_path).unwrap();
+    }
 }
